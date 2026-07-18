@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
 import { Button } from '../../src/components/Button';
 import { Input } from '../../src/components/Input';
+import { VaultConfirmModal, VaultAction } from '../../src/components/VaultConfirmModal';
 import { COLORS, SIZES, RADIUS } from '../../src/constants/theme';
 import { useWalletStore } from '../../src/store/walletStore';
 import { useVaultStore } from '../../src/store/vaultStore';
 import { validateAmount } from '../../src/utils/validation';
 import { PiggyBank, ShieldCheck, AlertTriangle } from 'lucide-react-native';
+
+const LOCK_PERIOD_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 export default function VaultScreen() {
   const { publicKey, getSecretKey, balance: walletBalance } = useWalletStore();
@@ -24,6 +27,11 @@ export default function VaultScreen() {
 
   const [amount, setAmount] = useState('');
   const [amountError, setAmountError] = useState<string | undefined>();
+
+  // Confirmation modal state
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [pendingAction, setPendingAction] = useState<VaultAction>('deposit');
+  const [pendingUnlockTime, setPendingUnlockTime] = useState('');
 
   useEffect(() => {
     if (publicKey) {
@@ -69,6 +77,10 @@ export default function VaultScreen() {
     } catch (e: any) {
       Alert.alert(`${action === 'deposit' ? 'Deposit' : 'Withdrawal'} failed`, e.message);
     }
+  };
+
+  const cancelAction = () => {
+    setConfirmVisible(false);
   };
 
   return (
@@ -120,7 +132,7 @@ export default function VaultScreen() {
 
       <View style={styles.form}>
         <Input
-          label="Amount to Deposit/Withdraw (XLM)"
+          label="Amount (XLM)"
           placeholder="0.00"
           value={amount}
           onChangeText={handleAmountChange}
@@ -145,6 +157,29 @@ export default function VaultScreen() {
             style={styles.actionButton}
           />
         </View>
+        <Button
+          title="Lock Funds (30 days)"
+          variant="outline"
+          onPress={() =>
+            Alert.alert(
+              'Lock Funds',
+              `Lock ${amount || '0'} XLM for 30 days? Locked funds cannot be withdrawn until the unlock time.`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Confirm Lock',
+                  onPress: () =>
+                    Alert.alert(
+                      'Notice',
+                      'Vault lock is not yet implemented. This is a placeholder for Soroban time-lock functionality.'
+                    ),
+                },
+              ]
+            )
+          }
+          disabled={isSubmitting}
+          style={styles.lockButton}
+        />
       </View>
     </ScrollView>
   );
@@ -249,5 +284,8 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
     marginHorizontal: SIZES.xs,
+  },
+  lockButton: {
+    marginTop: SIZES.md,
   },
 });

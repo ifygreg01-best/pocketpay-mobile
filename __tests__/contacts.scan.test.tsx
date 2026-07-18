@@ -12,6 +12,7 @@
  *  AC8 – QrScanner renders the camera view when permission is granted.
  *  AC9 – QrScanner calls onError for an invalid QR payload.
  *  AC10 – QrScanner calls onScan for a valid Stellar address payload.
+ *  AC11 – QrScanner debounces duplicate scan events (issue #104).
  */
 
 import React from 'react';
@@ -36,10 +37,18 @@ const mockRequestPermission = jest.fn(async () => {
   mockPermissionGranted = true;
 });
 
+// Captures the *current* onBarcodeScanned prop passed to CameraView so tests
+// can simulate the camera firing scan events directly (including firing
+// more than once before React re-renders), the same way a real device can
+// deliver several BarcodeScanningResult callbacks for one physical QR code
+// in quick succession.
+let latestBarcodeHandler: ((result: { data: string; type: string }) => void) | undefined;
+
 jest.mock('expo-camera', () => ({
   CameraView: ({ onBarcodeScanned, children }: any) => {
     // Attach a testID so tests can trigger a scan
     const { View } = require('react-native');
+    latestBarcodeHandler = onBarcodeScanned;
     return (
       <View
         testID="camera-view"
@@ -107,6 +116,7 @@ beforeEach(() => {
   alertSpy.mockImplementation(() => undefined);
   mockPermissionGranted = true;
   mockPermissionCanAskAgain = true;
+  latestBarcodeHandler = undefined;
   setupStore();
 });
 
@@ -482,5 +492,112 @@ describe('AC9 / AC10 – validateAddress used by scanner logic', () => {
 
   it('returns an error string for a truncated address', () => {
     expect(validateAddress('GABC')).toBeTruthy();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AC11 – QrScanner debounces duplicate scan events (issue #104)
+//
+// Mobile QR scanners can deliver several onBarcodeScanned callbacks for the
+// same physical code before state updates/navigation complete. These tests
+// drive the real onBarcodeScanned handler (captured from the CameraView
+// mock) directly, rather than calling onScan/onError themselves, so they
+// exercise QrScanner's actual debounce guard.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('AC11 – QrScanner ignores duplicate scan events', () => {
+  it('processes a valid scan only once when the same result fires twice in the same tick', () => {
+    const onScan = jest.fn();
+    const onError = jest.fn();
+    render(<QrScanner onScan={onScan} onError={onError} onClose={jest.fn()} />);
+
+    expect(latestBarcodeHandler).toBeDefined();
+
+    // Simulate the camera firing two events for the same QR code before
+    // React has re-rendered in response to the first one.
+    act(() => {
+      latestBarcodeHandler?.({ data: VALID_ADDRESS, type: 'qr' });
+      latestBarcodeHandler?.({ data: VALID_ADDRESS, type: 'qr' });
+    });
+
+    expect(onScan).toHaveBeenCalledTimes(1);
+    expect(onScan).toHaveBeenCalledWith(VALID_ADDRESS);
+  });
+
+  it('ignores rapid duplicate events even when they arrive as separate updates', () => {
+    const onScan = jest.fn();
+    const onError = jest.fn();
+    render(<QrScanner onScan={onScan} onError={onError} onClose={jest.fn()} />);
+
+    act(() => {
+      latestBarcodeHandler?.({ data: VALID_ADDRESS, type: 'qr' });
+    });
+    act(() => {
+      latestBarcodeHandler?.({ data: VALID_ADDRESS, type: 'qr' });
+    });
+    act(() => {
+      latestBarcodeHandler?.({ data: VALID_ADDRESS, type: 'qr' });
+    });
+
+    expect(onScan).toHaveBeenCalledTimes(1);
+  });
+
+  it('processes an invalid scan only once and does not call onScan for it', () => {
+    const onScan = jest.fn();
+    const onError = jest.fn();
+    render(<QrScanner onScan={onScan} onError={onError} onClose={jest.fn()} />);
+
+    act(() => {
+      latestBarcodeHandler?.({ data: INVALID_QR_PAYLOAD, type: 'qr' });
+      latestBarcodeHandler?.({ data: INVALID_QR_PAYLOAD, type: 'qr' });
+    });
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onScan).not.toHaveBeenCalled();
+  });
+
+  it('allows scanning again after the debounce window following an invalid scan', () => {
+    jest.useFakeTimers();
+    const onScan = jest.fn();
+    const onError = jest.fn();
+    render(<QrScanner onScan={onScan} onError={onError} onClose={jest.fn()} />);
+
+    act(() => {
+      latestBarcodeHandler?.({ data: INVALID_QR_PAYLOAD, type: 'qr' });
+    });
+    expect(onError).toHaveBeenCalledTimes(1);
+
+    // Immediately re-firing while still within the debounce window is ignored.
+    act(() => {
+      latestBarcodeHandler?.({ data: INVALID_QR_PAYLOAD, type: 'qr' });
+    });
+    expect(onError).toHaveBeenCalledTimes(1);
+
+    // After the debounce window (and the scanner's own reset timer) elapses,
+    // a fresh scan is accepted again.
+    act(() => {
+      jest.advanceTimersByTime(1600);
+    });
+    act(() => {
+      latestBarcodeHandler?.({ data: VALID_ADDRESS, type: 'qr' });
+    });
+    expect(onScan).toHaveBeenCalledTimes(1);
+    expect(onScan).toHaveBeenCalledWith(VALID_ADDRESS);
+
+    jest.useRealTimers();
+  });
+
+  it('stops forwarding onBarcodeScanned to the camera once a scan is being processed', () => {
+    const onScan = jest.fn();
+    render(<QrScanner onScan={onScan} onError={jest.fn()} onClose={jest.fn()} />);
+
+    act(() => {
+      latestBarcodeHandler?.({ data: VALID_ADDRESS, type: 'qr' });
+    });
+    expect(onScan).toHaveBeenCalledTimes(1);
+
+    // Once a scan is locked in, CameraView is re-rendered with
+    // onBarcodeScanned={undefined} so the camera stops delivering events.
+    expect(latestBarcodeHandler).toBeUndefined();
   });
 });

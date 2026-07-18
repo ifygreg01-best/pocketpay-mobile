@@ -105,13 +105,14 @@ export default function ContactsScreen() {
 
     setNameError(currentNameError);
     setKeyError(currentKeyError);
-    setDuplicateError(undefined);
 
     if (currentNameError || currentKeyError) return;
 
-    const existing = findContactByPublicKey(publicKey);
+    const existing = contacts.find(
+      (c) => c.publicKey.toLowerCase() === trimmedKey.toLowerCase(),
+    );
     if (existing) {
-      setDuplicateError(
+      setKeyError(
         `This address is already saved as "${existing.name}". You cannot add duplicate addresses.`,
       );
       return;

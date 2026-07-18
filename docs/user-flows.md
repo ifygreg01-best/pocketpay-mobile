@@ -146,22 +146,34 @@ New keypairs do not exist on the Stellar ledger until they receive their first T
 
 **Entry:** Settings → **Address Book / Contacts** → `/contacts`.
 
-1. With no saved contacts, display **No contacts yet** and **+ Add Contact**.
-2. Tapping **+ Add Contact** replaces the list with Name and Public Key fields plus Save and Cancel actions.
-3. Saving validates that both fields are present and that the public key starts with `G` and is exactly 56 characters.
-4. Validation errors appear in an alert and keep the entered values available for correction.
-5. A valid contact is appended to the list, persisted in AsyncStorage, and the form resets.
-6. Cancel closes the form without adding a contact.
-7. Tapping the delete icon opens a confirmation alert. Cancel keeps the contact; Delete removes it from state and AsyncStorage.
+1. With no saved contacts, display **No contacts yet** and two entry points: **+ Add Manually** and **Scan QR**.
+2. **+ Add Manually** opens a Name / Stellar Address form with Save and Cancel actions, plus a **Scan QR Instead** shortcut into the scanner.
+3. **Scan QR** opens the full-screen `QrScanner` in a modal. On a valid address it pre-fills the address (read-only) into the same form under **Save Scanned Contact**; the user only has to enter a name.
+4. Saving validates that a name is present and that the address is a valid, non-duplicate 56-character Stellar public key (starting with `G`).
+5. Validation errors appear inline (manual form) or as an alert (scan flow) and keep the entered values available for correction.
+6. A valid contact is appended to the list and the form resets.
+7. Cancel closes the form without adding a contact.
+8. Tapping the delete icon opens a confirmation alert. Cancel keeps the contact; Delete removes it from state.
 
 **Expected states**
 
 | State | Expected UI and behavior |
 | --- | --- |
-| Empty | Empty-state copy and Add Contact action. |
-| Adding | Name/public-key form with Save and Cancel. |
-| Invalid | Alert explains missing fields or invalid Stellar public-key format. |
+| Empty | Empty-state copy and both Add Manually / Scan QR actions. |
+| Scanning | Full-screen camera with a scan-window overlay and a Close action. |
+| Adding / Confirming scan | Name/public-key form with Save and Cancel; the address field is read-only after a scan. |
+| Invalid | Alert or inline error explains missing fields, an invalid Stellar public-key format, or a duplicate address. |
 | Populated | Contact name and abbreviated public key are shown. |
 | Deleting | Destructive confirmation prevents accidental removal. |
+
+**QR scan debounce (QA notes, issue #104)**
+
+Mobile QR scanners can fire more than one `onBarcodeScanned` callback for the same physical code before the resulting state update or navigation completes. `QrScanner` guards against this so a scan is only ever processed once:
+
+- A `hasScanned` flag plus a `lastScanTime` timestamp (checked synchronously, so it isn't affected by React's batching) reject any scan that arrives while a previous one is still being processed or within `SCAN_DEBOUNCE_MS` (1.5s) of the last one.
+- Once a scan is accepted, the camera's `onBarcodeScanned` prop is set to `undefined` so the camera stops delivering further events entirely, in addition to the guard above.
+- On an invalid scan, the lock is released automatically after the debounce window so the user can immediately try again without leaving the scanner.
+- On a valid scan, the lock is only released by unmounting/remounting the scanner (i.e. the user closing and reopening **Scan QR**), matching "reset it only when the user starts a new scan."
+- Covered by the `AC11` test group in `__tests__/contacts.scan.test.tsx`, which drives the scanner's real `onBarcodeScanned` handler (not just its `onScan`/`onError` callbacks) to prove duplicate and rapid-fire events are ignored and that scanning again after closing/reopening works.
 
 Contacts are currently an address-book management flow; the Send form does not yet provide contact selection. Document and test that integration separately when it is implemented.

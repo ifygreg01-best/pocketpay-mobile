@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useWalletStore } from '../../src/store/walletStore';
 import { COLORS, SIZES, RADIUS } from '../../src/constants/theme';
 import { Button } from '../../src/components/Button';
+import { FundButton } from '../../src/components/FundButton';
 import { TransactionListItem } from '../../src/components/TransactionListItem';
 import { Clock } from 'lucide-react-native';
 

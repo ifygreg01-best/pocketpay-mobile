@@ -5,10 +5,10 @@ import { fetchXlmBalance, fetchTransactionsPage, fundWithFriendbot, PaymentRecor
 
 const WALLET_KEY = 'pocketpay_wallet_secret';
 const DEFAULT_BALANCE = '0.0000000';
+const TX_PAGE_SIZE = 20;
 const PERSIST_WALLET_ERROR = 'Failed to persist wallet securely';
 const RESTORE_WALLET_ERROR = 'Failed to restore wallet securely';
 const CLEAR_WALLET_ERROR = 'Failed to clear wallet securely';
-const TX_PAGE_SIZE = 20;
 
 export type TransactionRecord = PaymentRecord;
 
@@ -20,6 +20,8 @@ interface WalletState {
   isFunding: boolean;
   fundError: string | null;
   error: string | null;
+
+  // Pagination
   isLoadingMore: boolean;
   hasMoreTransactions: boolean;
   nextCursor: string | null;
@@ -131,7 +133,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const { publicKey } = get();
     if (!publicKey) return;
 
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, isLoadingMore: false, nextCursor: null, hasMoreTransactions: false });
     try {
       const [balance, page] = await Promise.all([
         fetchXlmBalance(publicKey),

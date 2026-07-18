@@ -151,7 +151,7 @@ const invokeVault = async (
       );
     }
 
-    const confirmation = await server.pollTransaction(sendResponse.hash);
+    const confirmation = await server.getTransaction(sendResponse.hash);
     if (confirmation.status !== StellarSdk.rpc.Api.GetTransactionStatus.SUCCESS) {
       throw new Error(`Vault ${method} failed on-chain (status: ${confirmation.status})`);
     }

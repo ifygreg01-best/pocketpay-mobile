@@ -2,11 +2,12 @@ import * as StellarSdk from '@stellar/stellar-sdk';
 import * as ExpoCrypto from 'expo-crypto';
 import { Buffer } from 'buffer';
 
-export type PaymentRecord = any;
-
 const server = new StellarSdk.Horizon.Server(
   process.env.EXPO_PUBLIC_STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org'
 );
+
+/** Horizon operation record type used for transaction history. */
+export type PaymentRecord = StellarSdk.Horizon.ServerApi.OperationRecord;
 
 /**
  * Generates a new Stellar Keypair.
@@ -50,9 +51,10 @@ export const fetchAccountDetails = async (publicKey: string) => {
  */
 export const fetchXlmBalance = async (publicKey: string): Promise<string> => {
   try {
-    const accountBalance = await getBalance(publicKey, sdkConfig);
-    return accountBalance.nativeBalance;
-  } catch (error: unknown) {
+    const account = await fetchAccountDetails(publicKey);
+    const nativeBalance = account.balances.find((b) => b.asset_type === 'native');
+    return nativeBalance ? nativeBalance.balance : '0.0000000';
+  } catch (error: any) {
     // If account is not found (unfunded), balance is 0
     if (isNotFoundError(error)) {
       return '0.0000000';

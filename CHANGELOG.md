@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 ### Fixed
+- QR scanner no longer processes duplicate `onBarcodeScanned` events for the same code, preventing duplicate navigation/field updates on rapid-fire camera callbacks (#104)
 
 ### Security
 
